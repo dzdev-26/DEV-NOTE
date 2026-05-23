@@ -1,6 +1,0 @@
-{
-  "name": "DEV NOTE",
-  "description": "A mobile-first offline Notepad Android app designed for APK compilation via Capacitor, featuring Material You (MD3) styling.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

@@ -2,6 +2,14 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_background"/>
     <item>
+<<<<<<< HEAD
         <bitmap android:gravity="center" android:src="@drawable/splash"/>
     </item>
 </layer-list>
+=======
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/splash"/>
+    </item>
+</layer-list>
+>>>>>>> 8bb4503 (update debug-0.1.5)

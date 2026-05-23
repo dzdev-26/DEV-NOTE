@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Check, MoreVertical, Undo, Redo, ArrowLeft, Maximize, Minimize, 
+  Check, ArrowLeft, Maximize, Minimize, 
   Wand2, History, Share2, 
-  Download, Printer, Tag, Clock, Hash, Bold, List, Type, CheckSquare
+  Download, Printer, Tag, Clock, Hash, Bold, List, CheckSquare
 } from 'lucide-react';
 import { Note, AppSettings } from '../types';
 
@@ -40,12 +40,19 @@ export function EditorView({ note, settings, onSave, onCancel, onDelete, runWith
     };
   }, [content]);
 
-  // History tracking for undo/redo (Local session)
-  const [past, setPast] = useState<string[]>([]);
-  const [future, setFuture] = useState<string[]>([]);
-  const lastState = useRef({ title, content });
   const scrollProgressRef = useRef(0);
-  const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
+  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup on unmount: remove any dangling document listeners and pending timers
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.body.style.userSelect = '';
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updateScrollUI = (progress: number) => {
     scrollProgressRef.current = progress;
@@ -264,7 +271,7 @@ export function EditorView({ note, settings, onSave, onCancel, onDelete, runWith
           <button onClick={() => setIsDistractionFree(!isDistractionFree)} className="p-2 hover:bg-black/5 rounded-full">
             {isDistractionFree ? <Minimize size={20} /> : <Maximize size={20} />}
           </button>
-          <button onClick={handleSave} className="p-2 text-emerald-700 hover:bg-emerald-50 rounded-full"><Check size={24} /></button>
+          <button onClick={() => handleSave(true)} className="p-2 text-emerald-700 hover:bg-emerald-50 rounded-full"><Check size={24} /></button>
         </div>
       </header>
 
@@ -366,7 +373,7 @@ export function EditorView({ note, settings, onSave, onCancel, onDelete, runWith
             <button onClick={() => { if(navigator.share) navigator.share({title, text: content}); }} className="flex items-center gap-1 p-1 hover:text-md-primary">
               <Share2 size={14} /> Share
             </button>
-            <button onClick={() => onDelete(note?.id || '')} className="flex items-center gap-1 p-1 hover:text-red-600">
+            <button onClick={() => { if (note?.id) onDelete(note.id); }} className="flex items-center gap-1 p-1 hover:text-red-600">
               <Trash2 size={14} /> Trash
             </button>
           </div>

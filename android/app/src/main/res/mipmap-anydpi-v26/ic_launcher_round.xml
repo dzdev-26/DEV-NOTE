@@ -2,4 +2,8 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background"/>
     <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+<<<<<<< HEAD
 </adaptive-icon>
+=======
+</adaptive-icon>
+>>>>>>> 8bb4503 (update debug-0.1.5)

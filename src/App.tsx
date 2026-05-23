@@ -15,8 +15,9 @@ import { getNotes, saveNotes, getSettings, saveSettings } from './lib/storage';
 
 export default function App() {
   const [notes, setNotes] = useState<Note[]>([]);
-  const [settings, setSettings] = useState<AppSettings>(getSettings());
-  const [isLocked, setIsLocked] = useState(!!getSettings().pin);
+  const initialSettings = getSettings();
+  const [settings, setSettings] = useState<AppSettings>(initialSettings);
+  const [isLocked, setIsLocked] = useState(!!initialSettings.pin);
   const [currentNoteId, setCurrentNoteId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -133,8 +134,10 @@ export default function App() {
 
   return (
     <>
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         {isLoading && <Preloader key="preloader" />}
+      </AnimatePresence>
+      <AnimatePresence>
         {isActionLoading && <ActionOverlay key="action-loader" message={actionMessage} />}
       </AnimatePresence>
 

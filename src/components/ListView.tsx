@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { Plus, Search, Menu, FileText, Settings, Info, X, Trash2, Folder, Download, Upload, RotateCcw, Edit2 } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Plus, Search, Menu, FileText, Settings, X, Trash2, Folder, Download, Upload, RotateCcw, Edit2 } from 'lucide-react';
 import { Note, AppSettings } from '../types';
 import { SettingsModal } from './SettingsModal';
 
@@ -121,7 +121,18 @@ export function ListView({
   const isDragging = useRef(false);
   const startY = useRef(0);
   const startProgress = useRef(0);
-  const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
+  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup on unmount: remove dangling document listeners and pending timers
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.body.style.userSelect = '';
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updateScrollUI = (progress: number) => {
     scrollProgressRef.current = progress;

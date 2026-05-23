@@ -1,5 +1,5 @@
 {
-  "name": "dev-note",
+  "name": "react-example",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,9 +12,7 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",
-    "@capacitor/assets": "^3.0.5",
     "@capacitor/core": "^8.3.4",
-    "@capacitor/splash-screen": "^8.0.1",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
@@ -27,8 +25,7 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "tailwind-merge": "^3.6.0",
-    "vite": "^6.2.3",
-    "@capacitor/splash-screen": "^8.3.4"
+    "vite": "^6.2.3"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.3.4",

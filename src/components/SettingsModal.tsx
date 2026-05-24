@@ -24,11 +24,13 @@ export function SettingsModal({ settings, onClose, onUpdate }: SettingsModalProp
 
   return (
     <div className="absolute inset-0 bg-md-surface z-[100] flex flex-col animate-in slide-in-from-right duration-300">
-      <header className="h-14 px-2 flex items-center border-b border-md-outline-variant/30 shrink-0">
-        <button onClick={onClose} className="w-11 h-11 flex items-center justify-center hover:bg-black/5 rounded-full transition-colors">
-          <ArrowLeft className="w-6 h-6 text-md-on-surface" />
-        </button>
-        <h2 className="text-[18px] font-normal leading-7 ml-2 text-md-on-surface">Settings</h2>
+      <header className="shrink-0 bg-md-surface border-b border-md-outline-variant/30 relative pt-[env(safe-area-inset-top)]">
+        <div className="h-14 px-2 flex items-center w-full justify-start">
+          <button onClick={onClose} className="w-11 h-11 flex items-center justify-center hover:bg-black/5 rounded-full transition-colors shrink-0">
+            <ArrowLeft className="w-6 h-6 text-md-on-surface" />
+          </button>
+          <h2 className="text-[18px] font-normal leading-normal ml-2 text-md-on-surface flex items-center">Settings</h2>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-6 no-scrollbar">
@@ -106,6 +108,27 @@ export function SettingsModal({ settings, onClose, onUpdate }: SettingsModalProp
             </div>
             <div className={`w-12 h-6 rounded-full transition-colors relative ${settings.showLines ? 'bg-md-primary' : 'bg-md-outline'}`}>
               <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${settings.showLines ? 'left-7' : 'left-1'}`} />
+            </div>
+          </button>
+        </section>
+
+        {/* Walkthrough */}
+        <section>
+          <h3 className="text-sm font-medium text-md-primary mb-4 uppercase tracking-wider">Interactive Guide</h3>
+          <button 
+            id="btn-replay-onboarding"
+            onClick={() => {
+              onUpdate({ hasCompletedOnboarding: false });
+              onClose();
+            }}
+            className="w-full flex items-center gap-4 p-4 bg-md-surface-container-high rounded-2xl hover:bg-md-primary-container transition-colors text-left"
+          >
+            <div className="w-10 h-10 rounded-full bg-md-primary/10 flex items-center justify-center shrink-0">
+              <span className="text-lg">💡</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="block font-semibold text-sm text-md-on-surface">Replay App Tutorial</span>
+              <span className="block text-[11px] text-md-on-surface-variant/80 mt-0.5 leading-snug">Walk through all app settings, features, and numerical PIN security again.</span>
             </div>
           </button>
         </section>

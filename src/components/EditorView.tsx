@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Check, MoreVertical, Undo, Redo, ArrowLeft, Maximize, Minimize, 
-  Wand2, History, Share2, 
+  Wand2, History, Share2, Plus,
   Download, Printer, Tag, Clock, Hash, Bold, List, Type, CheckSquare
 } from 'lucide-react';
 import { Note, AppSettings } from '../types';
@@ -9,13 +9,14 @@ import { Note, AppSettings } from '../types';
 interface EditorViewProps {
   note?: Note;
   settings: AppSettings;
+  onUpdateSettings: (partial: Partial<AppSettings>) => void;
   onSave: (note: Note, close: boolean) => void;
   onCancel: () => void;
   onDelete: (id: string) => void;
   runWithLoader: (callback: () => void, message?: string) => void;
 }
 
-export function EditorView({ note, settings, onSave, onCancel, onDelete, runWithLoader }: EditorViewProps) {
+export function EditorView({ note, settings, onUpdateSettings, onSave, onCancel, onDelete, runWithLoader }: EditorViewProps) {
   const [title, setTitle] = useState(note?.title || '');
   const [content, setContent] = useState(note?.content || '');
   const [category, setCategory] = useState(note?.category || '');
@@ -23,11 +24,144 @@ export function EditorView({ note, settings, onSave, onCancel, onDelete, runWith
   const [isDistractionFree, setIsDistractionFree] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
+  const [showKeywordPrompt, setShowKeywordPrompt] = useState(false);
+  const [keywordInput, setKeywordInput] = useState('');
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      selectionRef.current = { start: content.length, end: content.length };
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleBack = (e: Event) => {
+      if (showKeywordPrompt) {
+        setShowKeywordPrompt(false);
+        e.preventDefault();
+        return;
+      }
+      if (showHistory) {
+        setShowHistory(false);
+        e.preventDefault();
+        return;
+      }
+      if (showMeta) {
+        setShowMeta(false);
+        e.preventDefault();
+        return;
+      }
+    };
+    window.addEventListener('appCancelBack', handleBack);
+    return () => window.removeEventListener('appCancelBack', handleBack);
+  }, [showHistory, showMeta, showKeywordPrompt]);
+
+  const defaultKeywords = React.useMemo(() => [
+    '#ROOT:', '#CAUSE:', '#ISSUE:', '#SOLUTION:', '#REQUEST:', '#SECTION:', '#PROCESS:', '#MAIN-CULPRIT:', '#REQUIREMENTS:', '#IMPORTANT:', '#‼️WARNING‼️:',
+    ...Array.from({ length: 100 }, (_, i) => `#${i + 1}:`)
+  ], []);
+
+  const allKeywords = [...defaultKeywords, ...(settings.customKeywords || [])];
+
+  const handleConfirmAddKeyword = () => {
+    if (keywordInput && keywordInput.trim() !== '') {
+      onUpdateSettings({ customKeywords: [...(settings.customKeywords || []), keywordInput.trim()] });
+    }
+    setKeywordInput('');
+    setShowKeywordPrompt(false);
+  };
+  
+  const handleAddKeyword = () => {
+    setKeywordInput('');
+    setShowKeywordPrompt(true);
+  };
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const selectionRef = useRef({ start: 0, end: 0 });
   const handleRef = useRef<HTMLDivElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const scrollHandleContainerRef = useRef<HTMLDivElement>(null);
+
+  // Swipe-safe Pointer Gesture Trackers (keeps keyboard open, prevents accidental clicks on swipe-to-scroll)
+  const keywordDragRef = useRef({
+    startX: 0,
+    startY: 0,
+    hasMoved: false,
+    isPointerDown: false
+  });
+
+  const actionDragRef = useRef({
+    startX: 0,
+    startY: 0,
+    hasMoved: false,
+    isPointerDown: false
+  });
+
+  const handleKeywordPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return; // only track primary pointer
+    e.preventDefault(); // crucial to prevent text area losing focus
+    keywordDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      hasMoved: false,
+      isPointerDown: true
+    };
+  };
+
+  const handleKeywordPointerMove = (e: React.PointerEvent) => {
+    if (!keywordDragRef.current.isPointerDown) return;
+    const dx = Math.abs(e.clientX - keywordDragRef.current.startX);
+    const dy = Math.abs(e.clientY - keywordDragRef.current.startY);
+    if (dx > 8 || dy > 8) {
+      keywordDragRef.current.hasMoved = true;
+    }
+  };
+
+  const handleKeywordPointerUp = (kw: string) => {
+    if (!keywordDragRef.current.isPointerDown) return;
+    const wasTap = !keywordDragRef.current.hasMoved;
+    keywordDragRef.current.isPointerDown = false;
+    if (wasTap) {
+      insertText(kw + '\n');
+    }
+  };
+
+  const handleActionPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); // keeps textarea focus
+    actionDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      hasMoved: false,
+      isPointerDown: true
+    };
+  };
+
+  const handleActionPointerMove = (e: React.PointerEvent) => {
+    if (!actionDragRef.current.isPointerDown) return;
+    const dx = Math.abs(e.clientX - actionDragRef.current.startX);
+    const dy = Math.abs(e.clientY - actionDragRef.current.startY);
+    if (dx > 8 || dy > 8) {
+      actionDragRef.current.hasMoved = true;
+    }
+  };
+
+  const handleActionPointerUp = (action: () => void) => {
+    if (!actionDragRef.current.isPointerDown) return;
+    const wasTap = !actionDragRef.current.hasMoved;
+    actionDragRef.current.isPointerDown = false;
+    if (wasTap) {
+      action();
+    }
+  };
+
+  const updateSelection = () => {
+    if (textareaRef.current) {
+      selectionRef.current = {
+        start: textareaRef.current.selectionStart,
+        end: textareaRef.current.selectionEnd
+      };
+    }
+  };
 
   // Stats memoization
   const stats = React.useMemo(() => {
@@ -154,17 +288,37 @@ export function EditorView({ note, settings, onSave, onCancel, onDelete, runWith
   const insertText = (text: string, wrap?: boolean) => {
     const el = textareaRef.current;
     if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const selected = content.substring(start, end);
+    
+    // Always use the robust selectionRef because accessing el.selectionStart immediately
+    // after a button click might return 0 if the textarea currently lost focus.
+    const start = selectionRef.current.start ?? content.length;
+    const end = selectionRef.current.end ?? content.length;
+    
+    // Bounds guard in case of weird state
+    const safeStart = Math.min(Math.max(0, start), content.length);
+    const safeEnd = Math.max(safeStart, Math.min(end, content.length));
+    
+    const selected = content.substring(safeStart, safeEnd);
     const newText = wrap ? `${text}${selected}${text}` : text;
-    const newVal = content.substring(0, start) + newText + content.substring(end);
+    const newVal = content.substring(0, safeStart) + newText + content.substring(safeEnd);
+    
     setContent(newVal);
-    // Restore focus
+    
+    // Update the ref to track the new caret pos so multiple inserts work without manual focus!
+    const newCursorPos = safeStart + text.length;
+    selectionRef.current = { start: newCursorPos, end: newCursorPos + (wrap ? selected.length : 0) };
+    
+    // Restore focus and selection
     setTimeout(() => {
       el.focus();
-      el.setSelectionRange(start + text.length, start + text.length + selected.length);
-    }, 0);
+      el.setSelectionRange(selectionRef.current.start, selectionRef.current.end);
+      
+      // Auto-scroll to keep caret in view
+      // If we are at the very end of the document, just scroll to bottom
+      if (selectionRef.current.start >= newVal.length - 10) {
+        el.scrollTop = el.scrollHeight;
+      }
+    }, 10);
   };
 
   const handleSave = (close = true) => {
@@ -250,21 +404,60 @@ export function EditorView({ note, settings, onSave, onCancel, onDelete, runWith
         </div>
       )}
 
+      {/* Keyword Prompt Modal */}
+      {showKeywordPrompt && (
+        <div className="absolute inset-0 z-[60] bg-black/40 backdrop-blur-[2px] flex items-center justify-center animate-in fade-in duration-200">
+          <div className="bg-md-surface-container-high w-[90%] max-w-sm rounded-[28px] shadow-2xl p-6 animate-in zoom-in-95 duration-200">
+            <h3 className="text-[24px] font-normal text-md-on-surface mb-4">Add Custom Keyword</h3>
+            <input
+              autoFocus
+              type="text"
+              value={keywordInput}
+              onChange={(e) => setKeywordInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleConfirmAddKeyword();
+              }}
+              placeholder="e.g. #my-tag:"
+              className="w-full bg-md-surface border-b border-md-primary/50 px-4 py-3 text-[16px] text-md-on-surface outline-none focus:border-md-primary transition-colors focus:bg-md-primary/5 rounded-t-lg mb-6"
+            />
+            <div className="flex justify-end gap-2">
+              <button 
+                onClick={() => setShowKeywordPrompt(false)}
+                className="px-6 py-2.5 text-md-primary font-bold text-[14px] rounded-full hover:bg-md-primary/10 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmAddKeyword}
+                className="px-6 py-2.5 bg-md-primary text-md-on-primary font-bold text-[14px] rounded-full hover:shadow-md transition-all active:scale-95"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Bar */}
-      <header className="h-[56px] px-1 flex items-center shrink-0 bg-md-surface border-b border-md-outline/20 z-10">
-        <button onClick={() => handleSave(true)} className="p-3 hover:bg-black/5 rounded-full"><ArrowLeft size={24} /></button>
-        <input 
-          value={title} 
-          onChange={e => setTitle(e.target.value)}
-          placeholder="Note Title"
-          className="flex-1 bg-transparent px-2 font-medium text-[16px] outline-none placeholder:opacity-40"
-        />
-        <div className="flex items-center gap-0.5 pr-1">
-          <button onClick={() => setShowMeta(!showMeta)} className="p-2 hover:bg-black/5 rounded-full"><Tag size={22} /></button>
-          <button onClick={() => setIsDistractionFree(!isDistractionFree)} className="p-2 hover:bg-black/5 rounded-full">
-            {isDistractionFree ? <Minimize size={20} /> : <Maximize size={20} />}
+      <header className="shrink-0 bg-md-surface border-b border-md-outline/20 z-10 w-full relative pt-[env(safe-area-inset-top)]">
+        <div className="h-[64px] px-1 sm:px-2 flex items-center justify-between w-full">
+          <button onClick={() => handleSave(true)} className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-full shrink-0 ml-1">
+            <ArrowLeft size={24} />
           </button>
-          <button onClick={handleSave} className="p-2 text-emerald-700 hover:bg-emerald-50 rounded-full"><Check size={24} /></button>
+          <input 
+            id="tour-note-title"
+            value={title} 
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Note Title"
+            className="flex-1 min-w-[50px] bg-transparent px-3 font-medium text-[18px] outline-none placeholder:opacity-40 text-ellipsis flex items-center"
+          />
+          <div className="flex items-center gap-1 shrink-0 mr-1">
+            <button onClick={() => setShowMeta(!showMeta)} className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-full shrink-0"><Tag size={22} /></button>
+            <button onClick={() => setIsDistractionFree(!isDistractionFree)} className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-full shrink-0">
+              {isDistractionFree ? <Minimize size={20} /> : <Maximize size={20} />}
+            </button>
+            <button id="tour-save-note" onClick={() => handleSave(true)} className="w-12 h-12 flex items-center justify-center text-emerald-700 hover:bg-emerald-50 rounded-full shrink-0"><Check size={24} /></button>
+          </div>
         </div>
       </header>
 
@@ -297,17 +490,65 @@ export function EditorView({ note, settings, onSave, onCancel, onDelete, runWith
       {/* Action Accessories Strip */}
       {!isDistractionFree && (
         <div className="flex items-center gap-1 px-3 py-1.5 bg-md-surface-container-high border-b border-md-outline/10 overflow-x-auto no-scrollbar shrink-0">
-          <button onClick={() => setShowHistory(true)} className="flex items-center gap-1 px-2.5 py-1.5 bg-md-surface rounded-full text-[10px] font-bold text-md-on-surface-variant hover:bg-md-primary-container transition-colors shrink-0">
+          <button 
+            id="tour-revision-history"
+            onPointerDown={handleActionPointerDown}
+            onPointerMove={handleActionPointerMove}
+            onPointerUp={() => handleActionPointerUp(() => setShowHistory(true))}
+            onPointerCancel={() => { actionDragRef.current.isPointerDown = false; }}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-md-surface rounded-full text-[10px] font-bold text-md-on-surface-variant hover:bg-md-primary-container transition-colors shrink-0"
+          >
             <History size={13} /> History
           </button>
           <div className="w-[1px] h-4 bg-md-outline/30 mx-1" />
-          <button onClick={() => insertText('# ')} className="p-2 hover:bg-md-primary/10 rounded-lg shrink-0"><Hash size={18} /></button>
-          <button onClick={() => insertText('**', true)} className="p-2 hover:bg-md-primary/10 rounded-lg shrink-0"><Bold size={18} /></button>
-          <button onClick={() => insertText('- ')} className="p-2 hover:bg-md-primary/10 rounded-lg shrink-0"><List size={18} /></button>
-          <button onClick={handleChecklistConvert} className="p-2 hover:bg-md-primary/10 rounded-lg shrink-0" title="Convert to Checklist"><CheckSquare size={18} /></button>
-          <button onClick={() => insertText(`\n[${new Date().toLocaleString()}]\n`)} className="p-2 hover:bg-md-primary/10 rounded-lg shrink-0"><Clock size={18} /></button>
+          <button 
+            onPointerDown={handleActionPointerDown}
+            onPointerMove={handleActionPointerMove}
+            onPointerUp={() => handleActionPointerUp(() => insertText('# '))}
+            onPointerCancel={() => { actionDragRef.current.isPointerDown = false; }}
+            className="p-2 hover:bg-md-primary/10 rounded-lg shrink-0"
+          >
+            <Hash size={18} />
+          </button>
+          <button 
+            onPointerDown={handleActionPointerDown}
+            onPointerMove={handleActionPointerMove}
+            onPointerUp={() => handleActionPointerUp(() => insertText('**', true))}
+            onPointerCancel={() => { actionDragRef.current.isPointerDown = false; }}
+            className="p-2 hover:bg-md-primary/10 rounded-lg shrink-0"
+          >
+            <Bold size={18} />
+          </button>
+          <button 
+            onPointerDown={handleActionPointerDown}
+            onPointerMove={handleActionPointerMove}
+            onPointerUp={() => handleActionPointerUp(() => insertText('- '))}
+            onPointerCancel={() => { actionDragRef.current.isPointerDown = false; }}
+            className="p-2 hover:bg-md-primary/10 rounded-lg shrink-0"
+          >
+            <List size={18} />
+          </button>
+          <button 
+            onPointerDown={handleActionPointerDown}
+            onPointerMove={handleActionPointerMove}
+            onPointerUp={() => handleActionPointerUp(handleChecklistConvert)}
+            onPointerCancel={() => { actionDragRef.current.isPointerDown = false; }}
+            className="p-2 hover:bg-md-primary/10 rounded-lg shrink-0" 
+            title="Convert to Checklist"
+          >
+            <CheckSquare size={18} />
+          </button>
+          <button 
+            onPointerDown={handleActionPointerDown}
+            onPointerMove={handleActionPointerMove}
+            onPointerUp={() => handleActionPointerUp(() => insertText(`\n[${new Date().toLocaleString()}]\n`))}
+            onPointerCancel={() => { actionDragRef.current.isPointerDown = false; }}
+            className="p-2 hover:bg-md-primary/10 rounded-lg shrink-0"
+          >
+            <Clock size={18} />
+          </button>
           <div className="w-[1px] h-4 bg-md-outline/30 mx-1" />
-          <button onClick={handleMagicFormat} className="p-2 text-md-primary hover:bg-md-primary/10 rounded-lg shrink-0" title="Magic Format"><Wand2 size={18} /></button>
+          <button id="tour-magic-format" onClick={handleMagicFormat} className="p-2 text-md-primary hover:bg-md-primary/10 rounded-lg shrink-0" title="Magic Format"><Wand2 size={18} /></button>
           <button onClick={handleDownload} className="p-2 text-md-on-surface-variant hover:bg-md-surface rounded-lg shrink-0"><Download size={18} /></button>
           <button onClick={() => window.print()} className="p-2 text-md-on-surface-variant hover:bg-md-surface rounded-lg shrink-0"><Printer size={18} /></button>
         </div>
@@ -340,7 +581,13 @@ export function EditorView({ note, settings, onSave, onCancel, onDelete, runWith
         <textarea
           ref={textareaRef}
           value={content}
-          onChange={e => setContent(e.target.value)}
+          onChange={e => {
+            setContent(e.target.value);
+            updateSelection();
+          }}
+          onSelect={updateSelection}
+          onClick={updateSelection}
+          onKeyUp={updateSelection}
           onScroll={handleScroll}
           placeholder="Start typing your thoughts..."
           style={{
@@ -353,6 +600,35 @@ export function EditorView({ note, settings, onSave, onCancel, onDelete, runWith
           className="flex-1 py-4 px-[5px] bg-transparent outline-none border-none resize-none text-md-on-surface placeholder:opacity-30"
         />
       </main>
+
+      {/* Keywords Bar */}
+      {!isDistractionFree && (
+        <div className="flex items-center bg-md-surface-container-high border-t border-md-outline/10 shrink-0 py-1.5">
+          <div className="px-3 border-r border-md-outline/20 flex items-center shrink-0">
+            <button 
+              onClick={handleAddKeyword}
+              className="w-10 h-10 flex items-center justify-center bg-md-primary text-md-on-primary rounded-full shadow-md border-2 border-md-surface/30 hover:brightness-105 active:scale-90 transition-all cursor-pointer"
+              title="Add Custom Keyword"
+            >
+              <Plus size={22} strokeWidth={3} />
+            </button>
+          </div>
+          <div className="flex-1 flex items-center gap-2 px-3 py-2 overflow-x-auto no-scrollbar whitespace-nowrap">
+            {allKeywords.map((kw, i) => (
+              <button 
+                key={i}
+                onPointerDown={handleKeywordPointerDown}
+                onPointerMove={handleKeywordPointerMove}
+                onPointerUp={() => handleKeywordPointerUp(kw)}
+                onPointerCancel={() => { keywordDragRef.current.isPointerDown = false; }}
+                className="px-3 py-1 bg-md-surface rounded-full text-[11px] font-bold text-md-on-surface-variant hover:text-md-primary hover:bg-md-primary/10 transition-colors shadow-sm shrink-0 tracking-wide"
+              >
+                {kw}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Footer Metrics */}
       {!isDistractionFree && (

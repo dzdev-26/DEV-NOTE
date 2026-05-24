@@ -19,7 +19,10 @@ export interface Note {
 export interface AppSettings {
   pin: string | null;
   categories: string[];
+  customKeywords?: string[];
   fontSize: number;
   lineSpacing: 'normal' | 'relaxed' | 'loose';
   showLines: boolean;
+  viewMode?: 'list' | 'details' | 'grid' | 'large-grid';
+  hasCompletedOnboarding?: boolean;
 }

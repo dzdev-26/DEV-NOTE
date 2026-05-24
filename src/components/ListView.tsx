@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { Plus, Search, Menu, FileText, Settings, Info, X, Trash2, Folder, Download, Upload, RotateCcw, Edit2 } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Plus, Search, Menu, FileText, Settings, Info, X, Trash2, Folder, Download, Upload, RotateCcw, Edit2, LayoutList, AlignJustify, Grid3x3, Grid2x2, LayoutGrid, Rows, LayoutDashboard, ArrowLeft } from 'lucide-react';
 import { Note, AppSettings } from '../types';
 import { SettingsModal } from './SettingsModal';
 
@@ -19,13 +19,14 @@ interface ListViewProps {
 interface NoteCardProps {
   note: Note;
   activeView: string;
+  viewMode: string;
   onSelect: (id: string) => void;
   onRestore: (id: string) => void;
   onPermanentDelete: (id: string) => void;
   onMoveToTrash: (id: string) => void;
 }
 
-const NoteCard = React.memo(({ note, activeView, onSelect, onRestore, onPermanentDelete, onMoveToTrash }: NoteCardProps) => {
+const NoteCard = React.memo(({ note, activeView, viewMode, onSelect, onRestore, onPermanentDelete, onMoveToTrash }: NoteCardProps) => {
   const d = new Date(note.updatedAt);
   const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined });
   
@@ -36,59 +37,73 @@ const NoteCard = React.memo(({ note, activeView, onSelect, onRestore, onPermanen
     return firstLine || 'Untitled Note';
   };
 
+  const getSnippet = (n: Note) => {
+    const text = n.content.replace(/^#+\s*/g, '').trim();
+    if (!text) return '';
+    return text;
+  };
+
   const displayTitle = getAutoTitle(note);
+  const snippet = getSnippet(note);
+  const isGrid = viewMode === 'grid' || viewMode === 'large-grid';
 
   return (
-    <div className="w-full flex items-stretch text-left bg-md-surface-variant border-b border-black/5 hover:bg-md-surface-container-high transition-colors min-h-[60px]">
+    <div className={`w-full flex ${isGrid ? 'flex-col rounded-xl overflow-hidden' : 'items-stretch'} text-left bg-md-surface-variant ${isGrid ? 'border' : 'border-b min-h-[60px]'} border-black/5 hover:bg-[rgba(0,0,0,0.02)] transition-colors relative group/card`}>
       <button
         onClick={() => onSelect(note.id)}
-        className="flex-1 flex flex-col justify-center text-left py-2.5 px-4 border-l-[6px] border-l-md-primary group min-w-0"
+        className={`flex-1 flex flex-col justify-start text-left min-w-0 ${isGrid ? 'p-3 pt-4' : 'py-2.5 px-4'} ${!isGrid && 'border-l-[6px] border-l-md-primary'}`}
       >
-        <div className="flex flex-col min-w-0">
-          <h3 className="text-[14px] text-md-on-surface font-semibold truncate leading-tight">
+        <div className="flex flex-col min-w-0 w-full">
+          <h3 className={`text-md-on-surface font-semibold truncate leading-tight ${viewMode === 'list' ? 'text-[14px]' : 'text-[15px] mb-1'}`}>
             {displayTitle}
           </h3>
+          {(viewMode === 'details' || isGrid) && snippet && (
+            <p className={`text-[13px] text-md-on-surface-variant opacity-80 leading-snug mb-2 ${viewMode === 'grid' ? 'line-clamp-3' : 'line-clamp-4'} break-words whitespace-pre-wrap`}>
+              {snippet}
+            </p>
+          )}
         </div>
-        <div className="flex gap-2 items-center mt-1">
+        <div className={`flex flex-wrap gap-2 items-center mt-auto ${isGrid ? 'pt-2' : 'mt-1'}`}>
           <span className="text-[11px] text-md-on-surface-variant font-bold opacity-60 uppercase tracking-tighter">
             {dateStr}
           </span>
           {note.category && (
-            <span className="text-[10px] px-1.5 py-0.5 bg-md-primary/20 text-md-on-surface font-black rounded uppercase">
+            <span className="text-[10px] px-1.5 py-0.5 bg-md-primary/10 text-md-on-surface font-black rounded uppercase mix-blend-multiply">
               {note.category}
             </span>
           )}
           {note.isChecklist && <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-800 rounded uppercase font-bold">List</span>}
         </div>
       </button>
+      
       {activeView === 'trash' ? (
-        <div className="flex items-center px-2 gap-1 border-l border-black/5">
+        <div className={`flex items-center ${isGrid ? 'absolute top-1 right-1 opacity-0 group-hover/card:opacity-100 bg-md-surface-variant/90 backdrop-blur-sm rounded-full p-1 shadow-sm' : 'border-l border-black/5 px-2'}`}>
           <button 
             onClick={() => onRestore(note.id)}
-            className="p-3 text-emerald-700 hover:bg-emerald-50 rounded-full"
+            className="p-2.5 text-emerald-700 hover:bg-emerald-50 rounded-full"
             title="Restore"
           >
-            <RotateCcw className="w-5 h-5" />
+            <RotateCcw className={`w-${isGrid ? '4' : '5'} h-${isGrid ? '4' : '5'}`} />
           </button>
           <button 
             onClick={() => onPermanentDelete(note.id)}
-            className="p-3 text-red-600 hover:bg-red-50 rounded-full"
+            className="p-2.5 text-red-600 hover:bg-red-50 rounded-full"
             title="Delete Permanently"
           >
-            <Trash2 className="w-5 h-5" />
+            <Trash2 className={`w-${isGrid ? '4' : '5'} h-${isGrid ? '4' : '5'}`} />
           </button>
         </div>
       ) : (
-        <div className="flex items-center px-2 border-l border-black/5">
+        <div className={`flex items-center ${isGrid ? 'absolute top-1 right-1 opacity-0 group-hover/card:opacity-100 bg-md-surface-variant/90 backdrop-blur-sm rounded-full p-1 shadow-sm' : 'border-l border-black/5 px-2'}`}>
           <button 
             onClick={(e) => {
               e.stopPropagation();
               onMoveToTrash(note.id);
             }}
-            className="p-3 text-md-on-surface-variant hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+            className="p-2.5 text-md-on-surface-variant hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
             title="Move to Trash"
           >
-            <Trash2 className="w-5 h-5" />
+            <Trash2 className={`w-${isGrid ? '4' : '5'} h-${isGrid ? '4' : '5'}`} />
           </button>
         </div>
       )}
@@ -110,6 +125,7 @@ export function ListView({
 }: ListViewProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [activeView, setActiveView] = useState<'all' | 'trash' | string>('all'); // 'all', 'trash', or category name
@@ -122,6 +138,40 @@ export function ListView({
   const startY = useRef(0);
   const startProgress = useRef(0);
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const handleBack = (e: Event) => {
+      if (isViewMenuOpen) {
+        setIsViewMenuOpen(false);
+        e.preventDefault();
+        return;
+      }
+      if (isSettingsOpen) {
+        setIsSettingsOpen(false);
+        e.preventDefault();
+        return;
+      }
+      if (isSidebarOpen) {
+        setIsSidebarOpen(false);
+        e.preventDefault();
+        return;
+      }
+      if (isSearchActive) {
+        setIsSearchActive(false);
+        setSearchQuery('');
+        e.preventDefault();
+        return;
+      }
+      if (activeView !== 'all') {
+        setActiveView('all');
+        e.preventDefault();
+        return;
+      }
+    };
+
+    window.addEventListener('appCancelBack', handleBack);
+    return () => window.removeEventListener('appCancelBack', handleBack);
+  }, [isSidebarOpen, isSettingsOpen, isSearchActive, activeView]);
 
   const updateScrollUI = (progress: number) => {
     scrollProgressRef.current = progress;
@@ -312,7 +362,7 @@ export function ListView({
           <p className="text-[11px] text-md-on-surface-variant mt-1">100% Offline Storage</p>
         </div>
         
-        <nav className="flex-1 py-1.5 flex flex-col gap-0.5 overflow-y-auto">
+        <nav className="flex-1 py-1.5 flex flex-col gap-0.5 overflow-y-auto no-scrollbar">
           <button 
             onClick={() => runWithLoader(() => { setActiveView('all'); setIsSidebarOpen(false); }, 'Loading All Notes...')}
             className={`flex items-center gap-4 px-6 py-2.5 mx-3 rounded-full transition-colors ${
@@ -360,7 +410,7 @@ export function ListView({
                   <button 
                     onClick={() => runWithLoader(() => { setActiveView(cat); setIsSidebarOpen(false); }, `Loading ${cat}...`)}
                     className={`flex-1 flex items-center gap-4 px-6 py-2.5 rounded-full transition-colors ${
-                      activeView === cat ? 'bg-md-primary-container text-md-on-primary-container' : 'text-md-on-surface-variant hover:bg-black/5'
+                      activeView === cat ? 'bg-md-secondary-container text-md-on-secondary-container' : 'text-md-on-surface-variant hover:bg-black/5'
                     }`}
                   >
                     <Folder className="w-[18px] h-[18px]" />
@@ -406,6 +456,7 @@ export function ListView({
             </div>
           ) : (
             <button 
+              id="tour-sidebar-new-category"
               onClick={() => setIsAddingCategory(true)}
               className="flex items-center gap-4 px-6 py-2.5 mx-3 rounded-full text-md-on-surface-variant hover:bg-black/5 decoration-dashed"
             >
@@ -419,7 +470,7 @@ export function ListView({
           <button 
             onClick={() => runWithLoader(() => { setActiveView('trash'); setIsSidebarOpen(false); }, 'Opening Recycle Bin...')}
             className={`flex items-center gap-4 px-6 py-2.5 mx-3 rounded-full transition-colors ${
-              activeView === 'trash' ? 'bg-red-100 text-red-900' : 'text-md-on-surface-variant hover:bg-black/5'
+              activeView === 'trash' ? 'bg-md-secondary-container text-md-on-secondary-container' : 'text-md-on-surface-variant hover:bg-black/5'
             }`}
           >
             <Trash2 className="w-[24px] h-[24px]" />
@@ -430,6 +481,7 @@ export function ListView({
 
           <div className="px-6 py-2 flex gap-2">
             <button 
+              id="tour-sidebar-export-json"
               onClick={handleExport}
               className="flex-1 flex flex-col items-center gap-1 p-2 bg-md-surface-container-high rounded-xl text-md-on-surface-variant hover:bg-md-primary-container transition-colors"
             >
@@ -444,6 +496,7 @@ export function ListView({
           </div>
 
           <button 
+            id="tour-sidebar-settings"
             onClick={() => runWithLoader(() => { setIsSettingsOpen(true); setIsSidebarOpen(false); }, 'Opening Settings...')}
             className="flex items-center gap-4 px-6 py-2.5 mx-3 rounded-full text-md-on-surface-variant hover:bg-black/5"
           >
@@ -454,41 +507,108 @@ export function ListView({
       </div>
 
       {/* Top App Bar */}
-      <header className="h-14 px-2 flex items-center justify-between shrink-0 bg-md-surface text-md-on-surface border-b border-md-outline-variant/10">
-        {!isSearchActive ? (
-          <>
-            <div className="flex items-center">
-              <button 
-                onClick={() => setIsSidebarOpen(true)}
-                className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-md-on-surface/5 active:bg-md-on-surface/10 transition-colors"
-              >
-                <Menu className="w-5 h-5" />
+      <header className="shrink-0 bg-md-surface text-md-on-surface border-b border-md-outline-variant/10 relative pt-[env(safe-area-inset-top)]">
+        <div className="h-[64px] px-1 sm:px-2 flex items-center justify-between w-full">
+          {!isSearchActive ? (
+            <>
+              <div className="flex items-center">
+                <button 
+                  id="tour-hamburger"
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-md-on-surface/5 active:bg-md-on-surface/10 transition-colors shrink-0"
+                >
+                  <Menu className="w-6 h-6" />
+                </button>
+                <h1 className="text-[18px] sm:text-[20px] font-normal leading-normal tracking-normal ml-1.5 flex items-center text-md-on-surface">
+                  {activeView === 'all' ? 'All Notes' : activeView === 'trash' ? 'Trash' : activeView}
+                </h1>
+              </div>
+              <div className="flex items-center gap-1">
+                <button 
+                  id="tour-search"
+                  onClick={() => setIsSearchActive(true)}
+                  className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-md-on-surface/5 active:bg-md-on-surface/10 transition-colors shrink-0"
+                  title="Search"
+                >
+                  <Search className="w-6 h-6" />
+                </button>
+                <div className="relative flex items-center">
+                  <button 
+                    id="tour-view-mode"
+                    onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
+                    className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-md-on-surface/5 active:bg-md-on-surface/10 transition-colors shrink-0 mr-1"
+                    title="View Options"
+                  >
+                    <LayoutDashboard className="w-[23px] h-[23px]" strokeWidth={2.2} />
+                  </button>
+
+                  {isViewMenuOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-[60]" 
+                        onClick={() => setIsViewMenuOpen(false)}
+                      />
+                      <div className="absolute right-0 top-12 mt-1 w-48 bg-md-surface-container shadow-lg rounded-xl overflow-hidden z-[70] py-2 border border-black/5 animate-in fade-in zoom-in-95 duration-150">
+                        <div className="px-4 py-2 text-sm font-semibold text-md-on-surface-variant mb-1">
+                          View
+                        </div>
+                        <button
+                          onClick={() => { onUpdateSettings({ viewMode: 'list' }); setIsViewMenuOpen(false); }}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-black/5 transition-colors"
+                        >
+                          <AlignJustify className="w-5 h-5 opacity-70" />
+                          <span className="text-[15px]">List</span>
+                        </button>
+                        <button
+                          onClick={() => { onUpdateSettings({ viewMode: 'details' }); setIsViewMenuOpen(false); }}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-black/5 transition-colors"
+                        >
+                          <Rows className="w-5 h-5 opacity-70" />
+                          <span className="text-[15px]">Details</span>
+                        </button>
+                        <button
+                          onClick={() => { onUpdateSettings({ viewMode: 'grid' }); setIsViewMenuOpen(false); }}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-black/5 transition-colors"
+                        >
+                          <Grid3x3 className="w-5 h-5 opacity-70" />
+                          <span className="text-[15px]">Grid</span>
+                        </button>
+                        <button
+                          onClick={() => { onUpdateSettings({ viewMode: 'large-grid' }); setIsViewMenuOpen(false); }}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-black/5 transition-colors"
+                        >
+                          <Grid2x2 className="w-5 h-5 opacity-70" />
+                          <span className="text-[15px]">Large grid</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center px-1 animate-in slide-in-from-right-4">
+              <button onClick={() => { setIsSearchActive(false); setSearchQuery(''); }} className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-black/5 shrink-0 ml-1">
+                <ArrowLeft className="w-6 h-6" />
               </button>
-              <h1 className="text-[18px] font-normal leading-7 tracking-normal ml-2">
-                {activeView === 'all' ? 'All Notes' : activeView === 'trash' ? 'Trash' : activeView}
-              </h1>
+              <input 
+                autoFocus
+                placeholder="Search through offline notes..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 bg-transparent border-none outline-none px-3 text-[18px] sm:text-[20px] font-normal text-md-on-surface placeholder:text-md-on-surface-variant/50 w-full flex items-center"
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-black/5 shrink-0 mr-1 opacity-70"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
-            <button 
-              onClick={() => setIsSearchActive(true)}
-              className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-md-on-surface/5 active:bg-md-on-surface/10 transition-colors"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center px-1 animate-in slide-in-from-right-4">
-            <button onClick={() => { setIsSearchActive(false); setSearchQuery(''); }} className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-black/5">
-              <X className="w-5 h-5" />
-            </button>
-            <input 
-              autoFocus
-              placeholder="Search through offline notes..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 bg-transparent border-none outline-none px-2 text-[14px] text-md-on-surface placeholder:text-md-on-surface-variant/50"
-            />
-          </div>
-        )}
+          )}
+        </div>
       </header>
 
       {/* List Content */}
@@ -518,12 +638,17 @@ export function ListView({
             <p className="text-sm mt-1">{searchQuery ? 'Try different keywords' : 'Your offline notes will appear here'}</p>
           </div>
         ) : (
-          <div className="flex flex-col pb-24">
+          <div className={`pb-24 ${
+            settings.viewMode === 'grid' ? 'grid grid-cols-2 gap-2 p-2' : 
+            settings.viewMode === 'large-grid' ? 'grid grid-cols-1 gap-3 p-3' : 
+            'flex flex-col'
+          }`}>
             {filteredNotes.map(note => (
               <NoteCard
                 key={note.id}
                 note={note}
                 activeView={activeView}
+                viewMode={settings.viewMode || 'details'}
                 onSelect={onSelect}
                 onRestore={onRestore}
                 onPermanentDelete={onPermanentDelete}
@@ -533,23 +658,11 @@ export function ListView({
           </div>
         )}
       </main>
-
-        {/* Floating Vertical Scroll Handle */}
-        <div 
-          ref={scrollHandleContainerRef}
-          className="absolute right-1.5 top-4 bottom-4 w-5 z-40 transition-opacity duration-300 opacity-0 pointer-events-none"
-        >
-          <div 
-            ref={handleRef}
-            onPointerDown={handlePointerDown}
-            className="w-full h-12 bg-[#ef6c61] rounded-[6px] absolute transition-all duration-100 ease-out shadow-lg border-2 border-white/10 pointer-events-auto cursor-pointer touch-none active:scale-110 active:brightness-110"
-            style={{ top: '0px' }}
-          />
-        </div>
       </div>
 
       {/* Floating Action Button (FAB) */}
       <button 
+        id="tour-fab-new"
         onClick={onNew}
         className="absolute bottom-6 right-6 w-14 h-14 rounded-2xl bg-md-primary-container text-md-on-primary-container shadow-md hover:shadow-lg active:shadow-sm transition-all flex items-center justify-center active:scale-95 z-30"
       >

@@ -1,14 +1,17 @@
+import { get, set } from 'idb-keyval';
 import { Note, AppSettings } from '../types';
 
 const STORAGE_KEY = 'md3_notepad_data_v2';
 const SETTINGS_KEY = 'md3_notepad_settings';
 
-const DEFAULT_SETTINGS: AppSettings = {
+export const DEFAULT_SETTINGS: AppSettings = {
   pin: null,
   categories: ['Personal', 'Work', 'Ideas'],
   fontSize: 13,
   lineSpacing: 'normal',
-  showLines: true
+  showLines: true,
+  viewMode: 'details',
+  hasCompletedOnboarding: false
 };
 
 const MOCK_NOTES: Note[] = [
@@ -28,36 +31,62 @@ const MOCK_NOTES: Note[] = [
   }
 ];
 
-export const getNotes = (): Note[] => {
+export const getNotes = async (): Promise<Note[]> => {
   try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : MOCK_NOTES;
+    let data = await get('md3_notes_db');
+    if (!data) {
+      // Migrate from localStorage
+      const lsData = localStorage.getItem(STORAGE_KEY);
+      if (lsData) {
+        data = JSON.parse(lsData);
+        await set('md3_notes_db', data);
+      } else {
+        return MOCK_NOTES;
+      }
+    }
+    return data;
   } catch (err) {
     console.error('Failed to parse notes from storage', err);
     return MOCK_NOTES;
   }
 };
 
-export const saveNotes = (notes: Note[]) => {
+export const saveNotes = async (notes: Note[]) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+    await set('md3_notes_db', notes);
+    // Keep localStorage clean to save quota
+    if (localStorage.getItem(STORAGE_KEY)) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
   } catch (err) {
     console.error('Failed to save notes to storage', err);
   }
 };
 
-export const getSettings = (): AppSettings => {
+export const getSettings = async (): Promise<AppSettings> => {
   try {
-    const data = localStorage.getItem(SETTINGS_KEY);
-    return data ? JSON.parse(data) : DEFAULT_SETTINGS;
+    let data = await get('md3_settings_db');
+    if (!data) {
+      const lsData = localStorage.getItem(SETTINGS_KEY);
+      if (lsData) {
+        data = JSON.parse(lsData);
+        await set('md3_settings_db', data);
+      } else {
+        return DEFAULT_SETTINGS;
+      }
+    }
+    return data;
   } catch (err) {
     return DEFAULT_SETTINGS;
   }
 };
 
-export const saveSettings = (settings: AppSettings) => {
+export const saveSettings = async (settings: AppSettings) => {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    await set('md3_settings_db', settings);
+    if (localStorage.getItem(SETTINGS_KEY)) {
+      localStorage.removeItem(SETTINGS_KEY);
+    }
   } catch (err) {
     console.error('Failed to save settings', err);
   }

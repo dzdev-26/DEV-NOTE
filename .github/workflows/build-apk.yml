@@ -47,6 +47,12 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Restore gradle-wrapper.jar
+        run: |
+          mkdir -p android/gradle/wrapper
+          curl -fsSL -o android/gradle/wrapper/gradle-wrapper.jar \
+            "https://raw.githubusercontent.com/gradle/gradle/v8.14.0/gradle/wrapper/gradle-wrapper.jar"
+
       - name: Make gradlew executable
         working-directory: android
         run: chmod +x gradlew

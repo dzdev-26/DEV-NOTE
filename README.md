@@ -1,4 +1,5 @@
-# DEV NOTE — Minimalist Offline Notepad & Workspace
+# DEV NOTE 
+Minimalist Offline Notepad & Workspace
 
 <p align="center">
   <img src="src/assets/images/devnote_banner_1779638873148.png" alt="DEV NOTE Banner" width="100%" referrerPolicy="no-referrer" />

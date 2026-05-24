@@ -57,12 +57,29 @@ jobs:
         working-directory: android
         run: chmod +x gradlew
 
-      - name: Build Debug APK
+      - name: Decode Keystore (Optional)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/devnote.keystore
+            echo "Keystore successfully decoded from GitHub Secrets!"
+          else
+            echo "KEYSTORE_BASE64 secret is empty. Skipping decode; Gradle will self-generate the custom Keystore."
+          fi
+
+      - name: Build Android App (Signed Release APK)
         working-directory: android
-        run: ./gradlew assembleDebug
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: app-apks
+          path: |
+            android/app/build/outputs/apk/release/*.apk

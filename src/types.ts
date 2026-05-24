@@ -20,6 +20,7 @@ export interface AppSettings {
   pin: string | null;
   categories: string[];
   customKeywords?: string[];
+  hiddenKeywords?: string[];
   fontSize: number;
   lineSpacing: 'normal' | 'relaxed' | 'loose';
   showLines: boolean;

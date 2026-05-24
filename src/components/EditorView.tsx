@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Check, MoreVertical, Undo, Redo, ArrowLeft, Maximize, Minimize, 
   Wand2, History, Share2, Plus,
-  Download, Printer, Tag, Clock, Hash, Bold, List, Type, CheckSquare
+  Download, Printer, Tag, Clock, Hash, Bold, List, Type, CheckSquare,
+  Eye, EyeOff
 } from 'lucide-react';
 import { Note, AppSettings } from '../types';
 
@@ -16,16 +17,92 @@ interface EditorViewProps {
   runWithLoader: (callback: () => void, message?: string) => void;
 }
 
+// Regex to parse both URLs and Phone numbers and render them as actual clickable anchor tags in Preview Mode.
+export function parseAndLinkText(text: string) {
+  if (!text) return [];
+  
+  const combinedRegex = /((?:https?:\/\/|www\.)[^\s\)\],;\"\'\<\>]+)|(\+?\d{1,4}[-.\s]?\(?\d{1,3}?\)?[-.\s]?\d{3,4}[-.\s]?\d{3,9})/gi;
+  
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+  
+  const regex = new RegExp(combinedRegex);
+  while ((match = regex.exec(text)) !== null) {
+    const matchIndex = match.index;
+    const matchText = match[0];
+    
+    if (matchIndex > lastIndex) {
+      parts.push(text.substring(lastIndex, matchIndex));
+    }
+    
+    if (match[1]) {
+      let href = matchText;
+      if (!href.match(/^https?:\/\//i)) {
+        href = 'http://' + href;
+      }
+      parts.push(
+        <a 
+          key={`url-${matchIndex}`}
+          href={href} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-md-primary underline font-medium hover:opacity-80 break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {matchText}
+        </a>
+      );
+    } else if (match[2]) {
+      const cleaned = matchText.replace(/[-.\s\(\)]/g, '');
+      const isLikelyPhone = cleaned.length >= 7 && cleaned.length <= 15 && /^\+?\d+$/.test(cleaned);
+      
+      if (isLikelyPhone) {
+        parts.push(
+          <a 
+            key={`phone-${matchIndex}`}
+            href={`tel:${cleaned}`} 
+            className="text-md-primary underline font-medium hover:opacity-80 break-all"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {matchText}
+          </a>
+        );
+      } else {
+        parts.push(matchText);
+      }
+    }
+    
+    lastIndex = regex.lastIndex;
+  }
+  
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+  
+  return parts;
+}
+
 export function EditorView({ note, settings, onUpdateSettings, onSave, onCancel, onDelete, runWithLoader }: EditorViewProps) {
   const [title, setTitle] = useState(note?.title || '');
   const [content, setContent] = useState(note?.content || '');
   const [category, setCategory] = useState(note?.category || '');
   const [tags, setTags] = useState(note?.tags?.join(', ') || '');
-  const [isDistractionFree, setIsDistractionFree] = useState(false);
+  const [isDistractionFree, setIsDistractionFree] = useState(!!note);
   const [showHistory, setShowHistory] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
   const [showKeywordPrompt, setShowKeywordPrompt] = useState(false);
   const [keywordInput, setKeywordInput] = useState('');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(!!note);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(prev => prev === msg ? null : prev);
+    }, 3500);
+  };
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -40,6 +117,11 @@ export function EditorView({ note, settings, onUpdateSettings, onSave, onCancel,
         e.preventDefault();
         return;
       }
+      if (showPrintModal) {
+        setShowPrintModal(false);
+        e.preventDefault();
+        return;
+      }
       if (showHistory) {
         setShowHistory(false);
         e.preventDefault();
@@ -50,17 +132,22 @@ export function EditorView({ note, settings, onUpdateSettings, onSave, onCancel,
         e.preventDefault();
         return;
       }
+      if (isPreviewMode) {
+        setIsPreviewMode(false);
+        e.preventDefault();
+        return;
+      }
     };
     window.addEventListener('appCancelBack', handleBack);
     return () => window.removeEventListener('appCancelBack', handleBack);
-  }, [showHistory, showMeta, showKeywordPrompt]);
+  }, [showHistory, showMeta, showKeywordPrompt, showPrintModal, isPreviewMode]);
 
   const defaultKeywords = React.useMemo(() => [
-    '#ROOT:', '#CAUSE:', '#ISSUE:', '#SOLUTION:', '#REQUEST:', '#SECTION:', '#PROCESS:', '#MAIN-CULPRIT:', '#REQUIREMENTS:', '#IMPORTANT:', '#‼️WARNING‼️:',
-    ...Array.from({ length: 100 }, (_, i) => `#${i + 1}:`)
+    '#ROOT:', '#CAUSE:', '#ISSUE:', '#SOLUTION:', '#REQUEST:', '#SECTION:', '#PROCESS:', '#MAIN-CULPRIT:', '#REQUIREMENTS:', '#IMPORTANT:', '#‼️WARNING‼️:'
   ], []);
 
   const allKeywords = [...defaultKeywords, ...(settings.customKeywords || [])];
+  const visibleKeywords = allKeywords.filter(kw => !settings.hiddenKeywords?.includes(kw));
 
   const handleConfirmAddKeyword = () => {
     if (keywordInput && keywordInput.trim() !== '') {
@@ -341,13 +428,66 @@ export function EditorView({ note, settings, onUpdateSettings, onSave, onCancel,
 
   const handleDownload = () => {
     runWithLoader(() => {
-      const blob = new Blob([`${title}\n\n${content}`], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${title || 'note'}.txt`;
-      a.click();
-    }, 'Preparing Download...');
+      let isDownloaded = false;
+      try {
+        const blob = new Blob([`${title || 'note'}\n\n${content}`], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${title || 'note'}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        isDownloaded = true;
+      } catch (err) {
+        console.error('Blob download triggered warning or failed:', err);
+      }
+
+      // Universal Android convenience fallback: Copy to clipboard and toast
+      try {
+        navigator.clipboard.writeText(`${title ? title + '\n\n' : ''}${content}`);
+        showToast(isDownloaded ? "💾 Note downloaded & copied to clipboard!" : "📋 Note text copied to clipboard!");
+      } catch (e) {
+        showToast("💾 Note text prepared for download!");
+      }
+    }, 'Saving Plaintext...');
+  };
+
+  const handlePrint = () => {
+    setShowPrintModal(true);
+    try {
+      window.print();
+    } catch (e) {
+      console.warn('Direct window.print bypassed in WebView.', e);
+    }
+  };
+
+  const handleShare = async () => {
+    const shareText = `${title ? title + '\n\n' : ''}${content}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: title || 'Dev Note',
+          text: shareText
+        });
+        showToast("🔗 Android Share panel opened!");
+        return;
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error(err);
+        } else {
+          return; // user cancelled, no toast
+        }
+      }
+    }
+
+    // Clipboard Copy Fallback
+    try {
+      await navigator.clipboard.writeText(shareText);
+      showToast("📋 Copied note to clipboard for rapid sharing!");
+    } catch (err) {
+      showToast("⚠️ Could not share. Please copy note manually.");
+    }
   };
 
   const lineSpacingRem = {
@@ -441,22 +581,40 @@ export function EditorView({ note, settings, onUpdateSettings, onSave, onCancel,
       {/* Top Bar */}
       <header className="shrink-0 bg-md-surface border-b border-md-outline/20 z-10 w-full relative pt-[env(safe-area-inset-top)]">
         <div className="h-[64px] px-1 sm:px-2 flex items-center justify-between w-full">
-          <button onClick={() => handleSave(true)} className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-full shrink-0 ml-1">
-            <ArrowLeft size={24} />
+          <button id="tour-save-note" onClick={() => handleSave(true)} className="w-10 h-10 flex items-center justify-center text-emerald-700 hover:bg-emerald-50 rounded-full shrink-0 ml-1" title="Save Note">
+            <Check size={24} />
           </button>
           <input 
             id="tour-note-title"
             value={title} 
             onChange={e => setTitle(e.target.value)}
             placeholder="Note Title"
-            className="flex-1 min-w-[50px] bg-transparent px-3 font-medium text-[18px] outline-none placeholder:opacity-40 text-ellipsis flex items-center"
+            disabled={isPreviewMode}
+            className="flex-1 min-w-[50px] bg-transparent px-2 font-medium text-[18px] outline-none placeholder:opacity-40 text-ellipsis flex items-center"
           />
-          <div className="flex items-center gap-1 shrink-0 mr-1">
-            <button onClick={() => setShowMeta(!showMeta)} className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-full shrink-0"><Tag size={22} /></button>
-            <button onClick={() => setIsDistractionFree(!isDistractionFree)} className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-full shrink-0">
-              {isDistractionFree ? <Minimize size={20} /> : <Maximize size={20} />}
+          <div className="flex items-center gap-0 shrink-0 mr-1">
+            <button 
+              id="tour-preview-toggle"
+              onClick={() => {
+                const next = !isPreviewMode;
+                setIsPreviewMode(next);
+                if (next) {
+                  setIsDistractionFree(true);
+                } else {
+                  setIsDistractionFree(false);
+                }
+              }} 
+              className={`w-10 h-10 flex items-center justify-center rounded-full shrink-0 ${isPreviewMode ? 'text-md-primary bg-md-primary/10' : 'hover:bg-black/5 text-md-on-surface-variant'}`}
+              title={isPreviewMode ? "Edit Mode" : "Preview / Read Mode"}
+            >
+              {isPreviewMode ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
-            <button id="tour-save-note" onClick={() => handleSave(true)} className="w-12 h-12 flex items-center justify-center text-emerald-700 hover:bg-emerald-50 rounded-full shrink-0"><Check size={24} /></button>
+            <button onClick={() => setShowMeta(!showMeta)} className="w-10 h-10 flex items-center justify-center hover:bg-black/5 rounded-full shrink-0"><Tag size={20} /></button>
+            {!isPreviewMode && (
+              <button onClick={() => setIsDistractionFree(!isDistractionFree)} className="w-10 h-10 flex items-center justify-center hover:bg-black/5 rounded-full shrink-0">
+                {isDistractionFree ? <Minimize size={18} /> : <Maximize size={18} />}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -549,8 +707,8 @@ export function EditorView({ note, settings, onUpdateSettings, onSave, onCancel,
           </button>
           <div className="w-[1px] h-4 bg-md-outline/30 mx-1" />
           <button id="tour-magic-format" onClick={handleMagicFormat} className="p-2 text-md-primary hover:bg-md-primary/10 rounded-lg shrink-0" title="Magic Format"><Wand2 size={18} /></button>
-          <button onClick={handleDownload} className="p-2 text-md-on-surface-variant hover:bg-md-surface rounded-lg shrink-0"><Download size={18} /></button>
-          <button onClick={() => window.print()} className="p-2 text-md-on-surface-variant hover:bg-md-surface rounded-lg shrink-0"><Printer size={18} /></button>
+          <button onClick={handleDownload} className="p-2 text-md-on-surface-variant hover:bg-md-surface rounded-lg shrink-0" title="Download TxT"><Download size={18} /></button>
+          <button onClick={handlePrint} className="p-2 text-md-on-surface-variant hover:bg-md-surface rounded-lg shrink-0" title="Print Help / PDF"><Printer size={18} /></button>
         </div>
       )}
 
@@ -578,27 +736,46 @@ export function EditorView({ note, settings, onUpdateSettings, onSave, onCancel,
           />
         </div>
 
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={e => {
-            setContent(e.target.value);
-            updateSelection();
-          }}
-          onSelect={updateSelection}
-          onClick={updateSelection}
-          onKeyUp={updateSelection}
-          onScroll={handleScroll}
-          placeholder="Start typing your thoughts..."
-          style={{
-            fontSize: `${settings.fontSize}px`,
-            lineHeight: `${lineSpacingRem}em`,
-            backgroundImage: settings.showLines ? `linear-gradient(transparent calc(${lineSpacingRem}em - 1px), rgba(0,0,0,0.05) calc(${lineSpacingRem}em - 1px))` : 'none',
-            backgroundSize: `100% ${lineSpacingRem}em`,
-            backgroundAttachment: 'local',
-          }}
-          className="flex-1 py-4 px-[5px] bg-transparent outline-none border-none resize-none text-md-on-surface placeholder:opacity-30"
-        />
+        {isPreviewMode ? (
+          <div
+            style={{
+              fontSize: `${settings.fontSize}px`,
+              lineHeight: `${lineSpacingRem}em`,
+              backgroundImage: settings.showLines ? `linear-gradient(transparent calc(${lineSpacingRem}em - 1px), rgba(0,0,0,0.05) calc(${lineSpacingRem}em - 1px))` : 'none',
+              backgroundSize: `100% ${lineSpacingRem}em`,
+              backgroundAttachment: 'local',
+              userSelect: 'text',
+              WebkitUserSelect: 'text'
+            }}
+            className="flex-1 py-4 px-4 bg-transparent overflow-y-auto outline-none text-md-on-surface whitespace-pre-wrap leading-relaxed break-words scroll-smooth select-text cursor-text"
+          >
+            {content ? parseAndLinkText(content) : (
+              <span className="opacity-30 italic text-sm">Empty note content...</span>
+            )}
+          </div>
+        ) : (
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={e => {
+              setContent(e.target.value);
+              updateSelection();
+            }}
+            onSelect={updateSelection}
+            onClick={updateSelection}
+            onKeyUp={updateSelection}
+            onScroll={handleScroll}
+            placeholder="Start typing your thoughts..."
+            style={{
+              fontSize: `${settings.fontSize}px`,
+              lineHeight: `${lineSpacingRem}em`,
+              backgroundImage: settings.showLines ? `linear-gradient(transparent calc(${lineSpacingRem}em - 1px), rgba(0,0,0,0.05) calc(${lineSpacingRem}em - 1px))` : 'none',
+              backgroundSize: `100% ${lineSpacingRem}em`,
+              backgroundAttachment: 'local',
+            }}
+            className="flex-1 py-4 px-[5px] bg-transparent outline-none border-none resize-none text-md-on-surface placeholder:opacity-30"
+          />
+        )}
       </main>
 
       {/* Keywords Bar */}
@@ -614,7 +791,7 @@ export function EditorView({ note, settings, onUpdateSettings, onSave, onCancel,
             </button>
           </div>
           <div className="flex-1 flex items-center gap-2 px-3 py-2 overflow-x-auto no-scrollbar whitespace-nowrap">
-            {allKeywords.map((kw, i) => (
+            {visibleKeywords.map((kw, i) => (
               <button 
                 key={i}
                 onPointerDown={handleKeywordPointerDown}
@@ -639,7 +816,7 @@ export function EditorView({ note, settings, onUpdateSettings, onSave, onCancel,
             <span className="text-md-primary">{stats.readTime} M.R</span>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => { if(navigator.share) navigator.share({title, text: content}); }} className="flex items-center gap-1 p-1 hover:text-md-primary">
+            <button onClick={handleShare} className="flex items-center gap-1 p-1 hover:text-md-primary">
               <Share2 size={14} /> Share
             </button>
             <button onClick={() => onDelete(note?.id || '')} className="flex items-center gap-1 p-1 hover:text-red-600">
@@ -647,6 +824,81 @@ export function EditorView({ note, settings, onUpdateSettings, onSave, onCancel,
             </button>
           </div>
         </footer>
+      )}
+
+      {/* Elegant MD3 style Dynamic Toast Alert */}
+      {toastMessage && (
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-md-on-surface text-md-surface py-2.5 px-5 rounded-full text-xs font-semibold shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200 z-[120] pointer-events-none flex items-center justify-center max-w-[85%] text-center">
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Android optimized Print/PDF Assist layout */}
+      {showPrintModal && (
+        <div className="absolute inset-0 z-[100] bg-black/40 backdrop-blur-[2px] flex items-center justify-center animate-in fade-in duration-200 pointer-events-auto">
+          <div className="bg-md-surface-container-high w-[90%] max-w-sm rounded-[28px] shadow-2xl p-6 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85%] pointer-events-auto">
+            <header className="flex items-center gap-3 mb-4 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-md-primary/10 flex items-center justify-center text-md-primary">
+                <Printer size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-md-on-surface leading-tight">Print & PDF Assist 🖨️</h3>
+                <span className="text-[10px] text-md-primary uppercase font-bold tracking-wider">Mobile WebView Optimization</span>
+              </div>
+            </header>
+
+            <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 mb-6">
+              <div className="text-[11px] leading-relaxed text-md-on-surface-variant bg-md-surface/60 p-3 rounded-2xl border border-black/5">
+                <p className="font-semibold mb-1">🇧🇩 অ্যান্ড্রয়েড প্রিন্ট গাইড:</p>
+                <p className="opacity-95">সরাসরি প্রিন্ট কাজ না করলে নিচের "Copy Clean Content" বাটনটি চেপে যেকোনো নোট অন্য কোথাও পেস্ট করে সরাসরি সেভ বা প্রিন্ট করতে পারবেন।</p>
+                <hr className="my-2 border-black/5" />
+                <p className="font-semibold mb-1">🇬🇧 Print Help:</p>
+                <p className="opacity-75 italic">If standard print prompts fail in WebView, copy the note text using the shortcut below to paste and print anywhere.</p>
+              </div>
+
+              <div className="border border-black/5 rounded-2xl p-3 bg-md-surface max-h-40 overflow-y-auto no-scrollbar text-xs">
+                <h4 className="font-bold text-md-on-surface truncate mb-1">{title || 'Untitled note'}</h4>
+                <p className="text-md-on-surface-variant whitespace-pre-wrap leading-relaxed break-words">{parseAndLinkText(content)}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 shrink-0">
+              <button 
+                onClick={() => {
+                  try {
+                    window.print();
+                  } catch (e) {
+                    showToast("System print failed in WebView.");
+                  }
+                }}
+                className="w-full py-3 bg-md-primary text-md-on-primary font-bold text-[13px] rounded-xl hover:shadow-md transition-all flex items-center justify-center gap-2"
+              >
+                <Printer size={16} /> Trigger System Print
+              </button>
+              
+              <button 
+                onClick={() => {
+                  try {
+                    navigator.clipboard.writeText(`${title ? title + '\n\n' : ''}${content}`);
+                    showToast("📋 Formatted note copied to clipboard!");
+                  } catch (e) {
+                    showToast("Failed to copy note.");
+                  }
+                }}
+                className="w-full py-3 bg-md-surface-container-highest text-md-on-surface font-bold text-[13px] rounded-xl hover:bg-black/5 transition-colors flex items-center justify-center gap-2 border border-black/5"
+              >
+                📋 Copy Clean Content
+              </button>
+
+              <button 
+                onClick={() => setShowPrintModal(false)}
+                className="w-full py-3 text-md-primary font-bold text-[13px] rounded-xl hover:bg-md-primary/5 transition-colors"
+              >
+                Close View
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

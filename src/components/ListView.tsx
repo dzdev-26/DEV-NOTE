@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Search, Menu, FileText, Settings, Info, X, Trash2, Folder, Download, Upload, RotateCcw, Edit2, LayoutList, AlignJustify, Grid3x3, Grid2x2, LayoutGrid, Rows, LayoutDashboard, ArrowLeft } from 'lucide-react';
+import { Plus, Search, Menu, FileText, Settings, Info, X, Trash2, Folder, Download, Upload, RotateCcw, Edit2, LayoutList, AlignJustify, Grid3x3, Grid2x2, LayoutGrid, Rows, LayoutDashboard, ArrowLeft, Hash } from 'lucide-react';
 import { Note, AppSettings } from '../types';
 import { SettingsModal } from './SettingsModal';
+import { KeywordsModal } from './KeywordsModal';
 
 interface ListViewProps {
   notes: Note[];
@@ -125,6 +126,7 @@ export function ListView({
 }: ListViewProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isKeywordsOpen, setIsKeywordsOpen] = useState(false);
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchActive, setIsSearchActive] = useState(false);
@@ -151,6 +153,11 @@ export function ListView({
         e.preventDefault();
         return;
       }
+      if (isKeywordsOpen) {
+        setIsKeywordsOpen(false);
+        e.preventDefault();
+        return;
+      }
       if (isSidebarOpen) {
         setIsSidebarOpen(false);
         e.preventDefault();
@@ -171,7 +178,7 @@ export function ListView({
 
     window.addEventListener('appCancelBack', handleBack);
     return () => window.removeEventListener('appCancelBack', handleBack);
-  }, [isSidebarOpen, isSettingsOpen, isSearchActive, activeView]);
+  }, [isSidebarOpen, isSettingsOpen, isKeywordsOpen, isSearchActive, activeView]);
 
   const updateScrollUI = (progress: number) => {
     scrollProgressRef.current = progress;
@@ -358,8 +365,7 @@ export function ListView({
         }`}
       >
         <div className="h-28 bg-md-surface-container-high p-4 flex flex-col justify-end">
-          <h2 className="text-[19px] font-normal text-md-on-surface">DEV NOTE</h2>
-          <p className="text-[11px] text-md-on-surface-variant mt-1">100% Offline Storage</p>
+          <h2 className="text-[28px] font-bold text-md-on-surface tracking-wide">DEV NOTE</h2>
         </div>
         
         <nav className="flex-1 py-1.5 flex flex-col gap-0.5 overflow-y-auto no-scrollbar">
@@ -475,6 +481,17 @@ export function ListView({
           >
             <Trash2 className="w-[24px] h-[24px]" />
             <span className="text-[13px] font-medium tracking-[0.1px]">Recycle Bin</span>
+          </button>
+
+          <button 
+            id="tour-sidebar-keywords"
+            onClick={() => runWithLoader(() => { setIsKeywordsOpen(true); setIsSidebarOpen(false); }, 'Opening Keywords Manager...')}
+            className={`flex items-center gap-4 px-6 py-2.5 mx-3 rounded-full transition-colors ${
+              isKeywordsOpen ? 'bg-md-secondary-container text-md-on-secondary-container' : 'text-md-on-surface-variant hover:bg-black/5'
+            }`}
+          >
+            <Hash className="w-[24px] h-[24px]" />
+            <span className="text-[13px] font-medium tracking-[0.1px]">Keywords</span>
           </button>
 
           <div className="h-[1px] bg-md-outline-variant/30 mt-auto my-2 mx-6" />
@@ -635,7 +652,7 @@ export function ListView({
             <p className="text-[16px] font-medium">
               {searchQuery ? 'No results found' : activeView === 'trash' ? 'Trash is empty' : 'Empty folder'}
             </p>
-            <p className="text-sm mt-1">{searchQuery ? 'Try different keywords' : 'Your offline notes will appear here'}</p>
+            <p className="text-sm mt-1">{searchQuery ? 'Try different keywords' : ''}</p>
           </div>
         ) : (
           <div className={`pb-24 ${
@@ -673,6 +690,14 @@ export function ListView({
         <SettingsModal 
           settings={settings} 
           onClose={() => setIsSettingsOpen(false)} 
+          onUpdate={onUpdateSettings} 
+        />
+      )}
+
+      {isKeywordsOpen && (
+        <KeywordsModal 
+          settings={settings} 
+          onClose={() => setIsKeywordsOpen(false)} 
           onUpdate={onUpdateSettings} 
         />
       )}
